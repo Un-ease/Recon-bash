@@ -3,6 +3,7 @@ A test recon script to enumerate subdomains and probe through live ones and take
 Tools used
 subfinder
 assetfinder
-spyhunt
+dnsx
+httpx
 
 
