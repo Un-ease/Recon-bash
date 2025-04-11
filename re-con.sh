@@ -15,7 +15,7 @@ recon() {
     DOMAIN=$1
     DIRECTORY=$2
 
-    if[ ! -d "$DIRECTORY" ]; then
+    if [ ! -d "$DIRECTORY" ]; then
         echo "Directory Doesn't Exist"
         exit 1
     fi
