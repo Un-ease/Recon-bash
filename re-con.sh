@@ -1,9 +1,9 @@
 #!/bin/bash
 
 echo '''
-__________       _________                
-\______   \ ____ \_   ___ \  ____   ____  
- |       _// __ \/    \  \/ /  _ \ /    \ 
+________       _______                
+\______   \ __ \_   _ \  __   __  
+ |       // _ \/    \  \/ /  _ \ /    \ 
  |    |   \  ___/\     \___(  <_> )   |  \
  |____|_  /\___  >\______  /\____/|___|  /
         \/     \/        \/            \/ 
@@ -21,41 +21,48 @@ recon() {
     fi
     
     echo "[+] Starting Subfinder \n"
-    subfinder -d "$DOMAIN" -recursive -o "$DIRECTORY/subdomain1.txt"
+    subfinder -d "$DOMAIN" -recursive -silent -o "$DIRECTORY/subdomain1.txt" 
     if [ $? -ne 0 ]; then
         echo "❌ Subfinder failed. Exiting..."
         exit 1
     fi
 
-    echo "[+] Starting AssetFinder \n"
-    assetfidner -subs-only "$DOMAIN" > "$DIRECTORY/subdomain2.txt"
+    echo "[+] Starting Asset Finder..."
+    assetfinder -subs-only "$DOMAIN" > "$DIRECTORY/subdomain2.txt"
     if [ $? -ne 0 ]; then
         echo "❌ Assetfinder failed. Exiting..."
         exit 1
     fi
     
+    subfinder -d "$DOMAIN" -o "$DIRECTORY/subdomain3.txt"
+    if [ $? -ne 0 ]; then
+        echo "❌ Subfinder failed. Exiting..."
+        exit 1
+    fi
+
     echo '[+] Sorting The Domains'
-    sort -u "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" > "$DIRECTORY/all_subs.txt"
-    remove "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt"
+    sort -u "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt" > "$DIRECTORY/all_subs.txt"
+    rm "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt"
 }
 
 dns_resolve(){
-    echo '[+] Resolving Dns'
-    dnsx -silent -l $DIRECTORY/all_subs.txt -o $DIRECTORY/resolved.txt
+    echo '[+] Resolving Dns' 
+    dnsx -silent -l $DIRECTORY/all_subs.txt -o $DIRECTORY/resolved.txt  
 }
 
 
 http_probe(){
     echo "[+] Checking For live servers"
-    httpx -l $DIRECTORY/resolved.txt -silent -status-code -title -tech-detect -o $DIRECTORY/httpx.txt
+    httpx -l $DIRECTORY/resolved.txt -silent -status-code -title -tech-detect -o $DIRECTORY/httpx.txt 
 
     echo "[+] Total live subdomains: $(wc -l < "$DIRECTORY/httpx.txt")"
 
-    cat "$DIRECTORY/httpx.txt" | grep "[[32m200[0m]" > "$DIRECTORY/200.txt"
-    echo "[+] 200 status code doamins: $(wc -l < "$DIRECTORY/200.txt")"
+    cat "$DIRECTORY/httpx.txt" | sed 's/\x1b\[[0-9;]*m//g' | grep "\[200\]" > "$DIRECTORY/200.txt"
+    echo "[+] 200 status code domains: $(wc -l < "$DIRECTORY/200.txt")"
 
+    echo "[+] Taking Screenshots"
     awk '{print $1}' > $DIRECTORY/plain.txt
-    cat $DIRECTORY/plain.txt | httpx -screenshot -silent -srd $DIRECTORY
+    cat $DIRECTORY/plain.txt | httpx -screenshot -silent -srd $DIRECTORY > /dev/null 
     echo "[+] Screenshots saved in $DIRECTORY"
 }
 
