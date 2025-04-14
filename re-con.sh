@@ -1,83 +1,72 @@
 #!/bin/bash
 
 echo '''
-________       _______                
-\______   \ __ \_   _ \  __   __  
- |       // _ \/    \  \/ /  _ \ /    \ 
+__________       _________                
+\______   \ ____ \_   ___ \  ____   ____  
+ |       _// __ \/    \  \/ /  _ \ /    \ 
  |    |   \  ___/\     \___(  <_> )   |  \
  |____|_  /\___  >\______  /\____/|___|  /
         \/     \/        \/            \/ 
                              
 '''
 
-
 recon() {
-    DOMAIN=$1
-    DIRECTORY=$2
+    local DOMAIN=$1
+    local DIRECTORY=$2
 
     if [ ! -d "$DIRECTORY" ]; then
-        echo "Directory Doesn't Exist"
-        exit 1
+        mkdir -p "$DIRECTORY" || { echo "❌ Failed to create directory"; exit 1; }
     fi
     
-    echo "[+] Starting Subfinder \n"
-    subfinder -d "$DOMAIN" -recursive -silent -o "$DIRECTORY/subdomain1.txt" 
-    if [ $? -ne 0 ]; then
-        echo "❌ Subfinder failed. Exiting..."
-        exit 1
-    fi
+    echo "[+] Starting Subfinder"
+    subfinder -d "$DOMAIN" -recursive -silent -o "$DIRECTORY/subdomain1.txt" || { echo "❌ Subfinder failed"; exit 1; }
 
-    echo "[+] Starting Asset Finder..."
-    assetfinder -subs-only "$DOMAIN" > "$DIRECTORY/subdomain2.txt"
-    if [ $? -ne 0 ]; then
-        echo "❌ Assetfinder failed. Exiting..."
-        exit 1
-    fi
+    echo "[+] Starting Asset Finder"
+    assetfinder -subs-only "$DOMAIN" > "$DIRECTORY/subdomain2.txt" || { echo "❌ Assetfinder failed"; exit 1; }
     
-    subfinder -d "$DOMAIN" -o "$DIRECTORY/subdomain3.txt"
-    if [ $? -ne 0 ]; then
-        echo "❌ Subfinder failed. Exiting..."
-        exit 1
-    fi
+    echo "[+] Running Subfinder (second pass)"
+    subfinder -d "$DOMAIN" -silent -o "$DIRECTORY/subdomain3.txt" || { echo "❌ Subfinder failed"; exit 1; }
 
     echo '[+] Sorting The Domains'
-    sort -u "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt" > "$DIRECTORY/all_subs.txt"
-    rm "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt"
+    sort -u "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt" > "$DIRECTORY/all_subs.txt" || { echo "❌ Sorting failed"; exit 1; }
+    rm -f "$DIRECTORY/subdomain1.txt" "$DIRECTORY/subdomain2.txt" "$DIRECTORY/subdomain3.txt"
 }
 
-dns_resolve(){
-    echo '[+] Resolving Dns' 
-    dnsx -silent -l $DIRECTORY/all_subs.txt -o $DIRECTORY/resolved.txt  
+dns_resolve() {
+    local DIRECTORY=$1
+    echo '[+] Resolving DNS' 
+    dnsx -silent -l "$DIRECTORY/all_subs.txt" -o "$DIRECTORY/resolved.txt" || { echo "❌ DNS resolution failed"; exit 1; }
 }
 
-
-http_probe(){
+http_probe() {
+    local DIRECTORY=$1
     echo "[+] Checking For live servers"
-    httpx -l $DIRECTORY/resolved.txt -silent -status-code -title -tech-detect -o $DIRECTORY/httpx.txt 
+    httpx-toolkit -l "$DIRECTORY/resolved.txt" -silent -status-code -title -tech-detect -o "$DIRECTORY/httpx-toolkit.txt" || { echo "❌ HTTP probing failed"; exit 1; }
 
-    echo "[+] Total live subdomains: $(wc -l < "$DIRECTORY/httpx.txt")"
+    echo "[+] Total live subdomains: $(wc -l < "$DIRECTORY/httpx-toolkit.txt")"
 
-    cat "$DIRECTORY/httpx.txt" | sed 's/\x1b\[[0-9;]*m//g' | grep "\[200\]" > "$DIRECTORY/200.txt"
+    # Clean ANSI colors before filtering
+    cat "$DIRECTORY/httpx-toolkit.txt" | sed 's/\x1b\[[0-9;]*m//g' | grep "\[200\]" > "$DIRECTORY/200.txt"
     echo "[+] 200 status code domains: $(wc -l < "$DIRECTORY/200.txt")"
 
-    echo "[+] Taking Screenshots"
-    awk '{print $1}' > $DIRECTORY/plain.txt
-    cat $DIRECTORY/plain.txt | httpx -screenshot -silent -srd $DIRECTORY > /dev/null 
+    # Extract URLs for screenshots
+    awk '{print $1}' "$DIRECTORY/200.txt" > "$DIRECTORY/plain.txt"
+    echo "[+] Taking screenshots"
+    httpx-toolkit -l "$DIRECTORY/plain.txt" -silent -screenshot -srd "$DIRECTORY" >/dev/null 2>&1
     echo "[+] Screenshots saved in $DIRECTORY"
 }
 
-
+# Main execution
 echo "Enter the Domain (eg. example.com)"
-read DOMAIN
+read -r DOMAIN
 
 echo "Enter the Directory you want to save the file in:"
-read DIRECTORY
+read -r DIRECTORY
 
 if [[ -z "$DOMAIN" || -z "$DIRECTORY" ]]; then
-    echo " Error: Both domain and directory are required."
+    echo "❌ Error: Both domain and directory are required."
     exit 1
 fi
-
 
 recon "$DOMAIN" "$DIRECTORY"
 dns_resolve "$DIRECTORY"
